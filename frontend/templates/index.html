@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Interview Coach</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <div id="setup-screen">
+        <div class="badge">Multi-Agent AI System</div>
+        <h1>InterviewSim AI</h1>
+
+        <p class="subtitle">
+            Practice realistic interviews tailored to your resume and job description.
+        </p>
+
+        <p class="feature-line">
+            Resume-aware Questions • Probabilistic Interviewer Policy • Automated Evaluations  
+             • Interview Analytics
+        </p>
+        <label>Target Role</label>
+        <input type="text" id="jobRole" placeholder="Target Role (e.g. Data Scientist, Assistant Manager)" required />
+        <label>Job Description</label>
+        <textarea id="jobDescription" placeholder="Paste Job Description" required></textarea>
+
+        <label class="file-upload">
+            Upload Resume (PDF)
+            <input type="file" id="resumeFile" accept=".pdf" required>
+        </label>
+
+        <button onclick="startInterview()">Start Interview</button>
+
+        <div class="button-row">
+            <button id="toggleConfig">Advanced Interview Settings</button>
+            <button onclick="openHistory()">Past Interviews</button>
+        </div>
+    </div>
+
+    <div id="config-panel" style="display:none;">
+
+        <button onclick="goBack('config')" id="closeConfig" class="config-back">← Back</button>
+        <h2 class="config-title">Advanced Interview Settings</h2>
+        <hr>
+        <div class="config-grid">
+
+            <!-- LEFT COLUMN -->
+            <div class="config-column">
+
+                <h3>API Settings</h3>
+                <hr>
+                <input type="text" id="apiKey" placeholder="LLM API Key">
+
+                <h3>Interview Parameters</h3>
+                <hr>
+                <label>Questions per Topic
+                    <span class="info-tip">
+                        ⓘ
+                        <span class="tooltip">
+                            Maximum number of questions asked for each topic before the interviewer moves to the next one.
+                        </span>
+                    </span>
+                </label>
+                <input type="number" id="questionsPerTopic" value="3">
+
+                <label>Interview Difficulty
+                    <span class="info-tip">
+                        ⓘ
+                        <span class="tooltip">
+                            Controls how deep or advanced the interviewer questions will be.
+                        </span>
+                    </span>
+                </label>
+                <select id="difficulty">
+                    <option value="easy">Easy</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="hard">Hard</option>
+                </select>
+
+                <h3>Answer Thresholds
+                    <span class="info-tip">
+                        ⓘ
+                        <span class="tooltip">
+                            After candidate submits an answer, a satisfaction score (0-1) is given by the evaluator agent. Based on the score, the interviewer will adapt its questioning strategy for the next question. These thresholds determine which strategy is used.
+                        </span>
+                    </span>
+                </h3>
+                <hr>
+                <div class="threshold-row">
+                    <label>Weak Threshold
+                        <span class="info-tip">
+                            ⓘ
+                            <span class="tooltip">
+                                Minimum score for an answer to be considered "weak". Answers below this threshold will trigger the "weak answer" interviewer policy.
+                            </span>
+                        </span>
+                    </label>
+                    <input type="number" step="0.05" id="weakThreshold" value="0.5">
+                </div>
+
+                <div class="threshold-row">
+                    <label>Medium Threshold
+                        <span class="info-tip">
+                            ⓘ
+                            <span class="tooltip">
+                                Minimum score for an answer to be considered "medium". Answers between the weak and medium thresholds will trigger the "medium answer" interviewer policy.
+                            </span>
+                        </span>
+                    </label>
+                    <input type="number" step="0.05" id="mediumThreshold" value="0.7">
+                </div>
+            </div>
+        
+            <!-- RIGHT COLUMN -->
+            <div class="config-column">
+
+                <h3>Interviewer Policy
+                    <span class="info-tip">
+                        ⓘ
+                        <span class="tooltip">
+                            Theory: Asking theoretical questions.<br>
+                            Applied: Questions from resume and applied scenarios.<br>
+                            Depth:  Questions that probe deeper into candidate's previous answer.<br>
+                            clarification: question to clarify previous answer when it's very weak.<br>
+                        </span>
+                    </span>
+                </h3>
+                <hr>
+                <div class="policy-block" data-group = "start">
+
+                    <h4>Start
+                        <span class="info-tip">
+                            ⓘ
+                            <span class="tooltip">
+                                The interviewer's questioning strategy for the first question to start the interview.
+                            </span>
+                        </span>
+                    </h4>
+                    <div class="slider-row">
+                        <label>Theory</label>
+                        <input type="range" id="startTheory" min="0" max="1" step="0.05" value="0.6">
+                        <span class="slider-value" id="startTheoryValue">0.6</span>
+                    </div>
+                    <div class="slider-row">
+                        <label>Applied</label>
+                        <input type="range" id="startApplied" min="0" max="1" step="0.05" value="0.4">
+                        <span class="slider-value" id="startAppliedValue">0.4</span>
+                    </div>
+                </div>
+
+
+                <div class="policy-block" data-group = "weak">
+
+                    <h4>Weak Answer
+                        <span class="info-tip">
+                            ⓘ
+                            <span class="tooltip">
+                                The interviewer's questioning strategy when the candidate's answer is very weak (below the weak threshold).
+                            </span>
+                        </span>
+                    </h4>
+                    <div class="slider-row">
+                        <label>Clarification</label>
+                        <input type="range" id="weakClarification" min="0" max="1" step="0.05" value="0.8">
+                        <span class="slider-value" id="weakClarificationValue">0.8</span>
+                    </div>
+                    <div class="slider-row">
+                        <label>Theory</label>
+                        <input type="range" id="weakTheory" min="0" max="1" step="0.05" value="0.2">
+                        <span class="slider-value" id="weakTheoryValue">0.2</span>
+                    </div>
+
+                </div>
+
+                <div class="policy-block" data-group = "medium">
+
+                    <h4>Medium Answer
+                        <span class="info-tip">
+                            ⓘ
+                            <span class="tooltip">
+                                The interviewer's questioning strategy when the candidate's answer is decent but not great (between the weak and medium thresholds).
+                            </span>
+                        </span>
+                    </h4>
+                    <div class="slider-row">
+                        <label>Depth</label>
+                        <input type="range" id="mediumDepth" min="0" max="1" step="0.05" value="0.5">
+                        <span class="slider-value" id="mediumDepthValue">0.5</span>
+                    </div>
+                    <div class="slider-row">
+                        <label>Theory</label>
+                        <input type="range" id="mediumTheory" min="0" max="1" step="0.05" value="0.3">
+                        <span class="slider-value" id="mediumTheoryValue">0.3</span>
+                    </div>
+                    <div class="slider-row">
+                        <label>Applied</label>
+                        <input type="range" id="mediumApplied" min="0" max="1" step="0.05" value="0.2">
+                        <span class="slider-value" id="mediumAppliedValue">0.2</span>
+                    </div>
+
+                </div>
+
+                <div class="policy-block" data-group = "strong">
+
+                    <h4>Strong Answer
+                        <span class="info-tip">
+                            ⓘ
+                            <span class="tooltip">
+                                The interviewer's questioning strategy when the candidate's answer is strong (above the medium threshold).
+                            </span>
+                        </span>
+                    </h4>
+                    <div class="slider-row">
+                        <label>Applied</label>
+                        <input type="range" id="strongApplied" min="0" max="1" step="0.05" value="0.5">
+                        <span class="slider-value" id="strongAppliedValue">0.5</span>
+                    </div>
+                    <div class="slider-row">
+                        <label>Depth</label>
+                        <input type="range" id="strongDepth" min="0" max="1" step="0.05" value="0.3">
+                        <span class="slider-value" id="strongDepthValue">0.3</span>
+                    </div>
+                    <div class="slider-row">
+                        <label>Theory</label>
+                        <input type="range" id="strongTheory" min="0" max="1" step="0.05" value="0.2">
+                        <span class="slider-value" id="strongTheoryValue">0.2</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+        <button id="resetConfig" class="config-reset">
+            Reset to Defaults
+        </button>
+
+    </div>
+
+    <div id="history-screen" style="display:none;">
+
+        <div id="history-header">
+            <h2>Past Interviews</h2>
+            <button onclick="goBack('history')" id="closeConfig" class="config-back">← Back</button>
+        </div>
+
+        <table id="history-table">
+
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Role</th>
+                    <th>Score</th>
+                    <th>Session</th>
+                </tr>
+            </thead>
+
+            <tbody>
+            </tbody>
+
+        </table>
+
+    </div>
+
+    <div id="chat-screen">
+        <div id="header">
+            <h2 id="role-display">Interview</h2>
+            <span id="status">● Live</span>
+        </div>
+        
+        <div id="messages">
+            </div>
+
+        <div id="input-area">
+            <textarea id="msgInput" placeholder="Type your answer..." rows="2" disabled></textarea>
+            <button onclick="sendMsg()" id="sendBtn">Send</button>
+        </div>
+        <button id="evaluationBtn" onclick="getEvaluation()" style="display:none;">
+            Get Evaluation
+        </button>
+    </div>
+        
+    <div id="evaluation-screen">
+
+        <button onclick="goBack('evaluation')" id="closeConfig" class="config-back">← Back</button>
+        <div class="eval-container">
+
+            <!-- SCORE -->
+            <section class="score-card">
+                <h2>Overall Score</h2>
+                <div id="score-value">0%</div>
+            </section>
+
+            <!-- STRENGTHS / WEAKNESSES -->
+            <section class="sw-section">
+
+                <div class="strength-box">
+                    <h3>Strengths</h3>
+                    <ul id="strength-list"></ul>
+                </div>
+
+                <div class="weakness-box">
+                    <h3>Weaknesses</h3>
+                    <ul id="weakness-list"></ul>
+                </div>
+
+            </section>
+
+            <!-- TOPIC CHART -->
+            <section class="chart-section">
+                <h3>Topic Performance</h3>
+                <canvas id="topicChart"></canvas>
+            </section>
+
+            <!-- LLM SUMMARY -->
+            <section class="summary-section" >
+                <h3>Interview Summary</h3>
+                <div id="evaluation-text"></div>
+            </section>
+            <button id="viewTranscriptBtn">
+                View Interview Transcript
+            </button>
+
+        </div>
+
+    </div>
+    <div id="transcript-modal" class="modal">
+
+        <div class="modal-content">
+
+            <div class="modal-header">
+                <h3>Interview Transcript</h3>
+                <span id="closeTranscriptModal" class="modal-close">&times;</span>
+            </div>
+
+            <div id="transcript-messages"></div>
+
+        </div>
+
+    </div>
+
+    <script src="/static/script.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+autogen-agentchat==0.5.7
+autogen-core
+autogen-ext
+python-dotenv
+openai
+tiktoken
+pydantic
+pytest
+fastapi
+uvicorn
+websockets
+jinja2
+aiofiles
+pdfplumber
+sentence_transformers
+faiss-cpu
