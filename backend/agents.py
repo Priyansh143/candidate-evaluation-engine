@@ -55,6 +55,12 @@ async def ask_interviewer(
         "CLARIFICATION": "Ask a focused follow-up to clarify an ambiguous or incomplete part of the candidate's last answer.",
         "DEPTH": "Ask a deeper follow-up question that probes the candidate's reasoning — test their understanding of why something works, when it doesn't, or how it would change under different conditions."
     }.get(action, "Ask a relevant interview question.")
+    
+    difficulty_instruction = {
+    "easy": "Difficulty: Easy",
+    "medium": "Question should not be too difficult or easy.",
+    "hard": "Difficulty level of question should be high"
+    }.get(interview_difficulty,"Question should not be too difficult or easy.")
 
     
     logger.info("action mapping- " + action_instruction)
@@ -70,14 +76,13 @@ async def ask_interviewer(
         {history_block or "None"}
         Task:
         {action_instruction}
-        difficulty level: {interview_difficulty}
+        {difficulty_instruction}
         Rules:
-        - Ask ONE clear question
-        - Do NOT ask about skills already demonstrated by the candidate
-        - Do NOT explain or give hints
-        - Do NOT evaluate the answer
-        - Do NOT halucinate candidate's experience, only use the provided resume evidence if it makes sense to you
-        - Keep the question under 50 words
+        - Ask ONE clear question.
+        - Do NOT ask about skills already demonstrated by the candidate.
+        - Do NOT explain or give hints.
+        - Do NOT halucinate candidate's experience, only use the provided resume evidence if it is relevant and sensible.
+        - Keep the question under 50 words.
         """.strip()
 
     logger.info("Passed prompt generation")
@@ -115,6 +120,7 @@ async def evaluate_answer(
     jd_priority: str,
     question: str,
     answer: str,
+    difficulty:str,
     logger=None,
 ) -> Dict:
     """
@@ -128,23 +134,33 @@ async def evaluate_answer(
             f"question_len={len(question)} | "
             f"answer_len={len(answer)}"
         )
-    example = '{"strengths":["PostgreSQL proficiency","deployment experience"],"weaknesses":["monitoring knowledge", "cloud architecture"],"satisfaction":0.8,"eval_confidence":"high"}'
+    
+    difficulty_instruction = {
+        "easy": "Be slightly lenient in evaluation.",
+        "medium": "Maintain balanced evaluation standards.",
+        "hard": "Be slightly strict in evaluation."
+    }
+    difficulty_prompt = difficulty_instruction.get(difficulty, "Maintain balanced evaluation standards.")
+    example = '{"strengths":["strength 1, strength 2"],"weaknesses":["weaknesss 1", "weakness 2"],"satisfaction":0.7,"eval_confidence":"medium"}'
     prompt = f"""
         You are an interview evaluator for the role of {job_role}.
+        {difficulty_prompt}
+        
+        Evaluate the candidate's answer against the question asked for the topic being assessed.
+        
+        Return ONLY valid JSON with the following keys:
+        - satisfaction: how satisfactory the answer is for the Interview question asked, on a scale of 0 to 1
+        - strengths: list of skill or concept labels that were well demonstrated in the answer, if no strenghts depicted then []
+        - weaknesses: list of expected skill, behaviour, concept labels that were missing, weak or wrong in the answer. if no weaknesses then []
+        - confidence: one of ["low", "medium", "high"] representing how confident you are in your evaluation.
+        Example:
+        {example}
         Topic being assessed:
         {jd_priority}
         Interview Question:
         {question}
         Candidate Answer:
         {answer}
-        Return ONLY valid JSON with the following keys:
-        - satisfaction: how satisfactory the answer is for the Interview question asked, float between 0 and 1
-        - strengths: list of skill or concept labels that were well demonstrated in the answer, if any, else []
-        - weaknesses: list of skill or concept labels that were missing or weak, if any, else []
-        - confidence: one of ["low", "medium", "high"] representing how confident you are in your evaluation 
-
-        Example:
-        {example}
         """.strip()
 
     response = await llm_client.create(

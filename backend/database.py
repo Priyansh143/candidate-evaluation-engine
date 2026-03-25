@@ -22,6 +22,18 @@ CREATE TABLE IF NOT EXISTS interview_turns (
     answer TEXT
 )
 """)
+cursor.execute(""" 
+    CREATE TABLE IF NOT EXISTS interview_reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT UNIQUE,
+    overall_score REAL,
+    strengths TEXT,
+    weaknesses TEXT,
+    topic_performance TEXT,
+    llm_report TEXT,
+    created_at DATETIME
+)
+""")
 
 conn.commit()
 print("Database initialized and table created if not exists.")
@@ -64,4 +76,31 @@ def save_turn(record):
         )
     )
 
+    conn.commit()
+    
+def save_report(record):
+    cursor.execute(
+        """
+        INSERT INTO interview_reports
+        (
+        session_id,
+        overall_score,
+        strengths,
+        weaknesses,
+        topic_performance,
+        llm_report,
+        created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            record["session_id"],
+            record["overall_score"],
+            json.dumps(record["strengths"]),
+            json.dumps(record["weaknesses"]),
+            json.dumps(record["topic_performance"]),
+            record["llm_report"],
+            record["created_at"]
+        )
+    )
     conn.commit()

@@ -19,26 +19,15 @@ import sqlite3
 import yaml
 import json
 
-with open("backend/config.yaml") as f:
-    CONFIG = yaml.safe_load(f)
-    
+PROFILE_PATH = "data/profile.json"
+CONFIG_PATH = "config.yaml"
 session_store = {}
-
-load_dotenv()
-model_client = OpenAIChatCompletionClient(model = CONFIG["models"]["llm_model"],
-                                          api_key=CONFIG["api"]["groq_api_key"],
-                                          base_url="https://api.groq.com/openai/v1",
-                                          model_info={
-                                                "family": "llama",
-                                                "context_length": 8192,
-                                                "vision": False,
-                                                "function_calling": True,
-                                                "json_output": True,
-                                                "supports_tools": True,
-                                                "structured_output": False,
-                                            })
-
+model_client = None
+use_profile = False
 app = FastAPI()
+
+with open(CONFIG_PATH, "r") as f:
+    CONFIG = yaml.safe_load(f) 
 
 app.mount("/static", StaticFiles(directory="frontend/static"), name = "static")
 templates = Jinja2Templates(directory="frontend/templates")
@@ -65,24 +54,44 @@ class WebSocketInputHandler:
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
     # Render the index.html template
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "api_key": CONFIG.get("api", {}).get("groq_api_key", "")
+        })
 
+@app.get("/config")
+def get_config():
+    return CONFIG 
 
 @app.post("/setup")
 async def setup_interview(
     role: str = Form(...),
     jd: str = Form(...),
-    resume: UploadFile = File(...),
+    resume: Optional[UploadFile] = File(None),
     config: str = Form(...)
 ):
+    global model_client  
     CONFIG = json.loads(config)
-    os.makedirs("uploads", exist_ok=True)
+    model_client = OpenAIChatCompletionClient(model = CONFIG["models"]["llm_model"],
+                                          api_key=CONFIG["api"]["groq_api_key"],
+                                          base_url="https://api.groq.com/openai/v1",
+                                          model_info={
+                                                "family": "llama",
+                                                "context_length": 8192,
+                                                "vision": False,
+                                                "function_calling": True,
+                                                "json_output": True,
+                                                "supports_tools": True,
+                                                "structured_output": False,
+                                            })
     session_id = str(uuid.uuid4())
+    resume_path = None
+    if (resume):
+        os.makedirs("uploads", exist_ok=True)
+        resume_path = f"uploads/{session_id}.pdf"
 
-    resume_path = f"uploads/{session_id}.pdf"
-
-    with open(resume_path, "wb") as buffer:
-        shutil.copyfileobj(resume.file, buffer)
+        with open(resume_path, "wb") as buffer:
+            shutil.copyfileobj(resume.file, buffer)
 
     session_store[session_id] = {
         "role": role,
@@ -121,13 +130,15 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         jd_priorities, topic_objects = await extract_jd_priorities_llm(
             jd_role=job_role,
             jd_text=job_desc,
+            max_topics=config["interview"]["max_topics"],
             llm_call=model_client,
             logger=logger
         )
 
         # Search resume evidence
-        faiss_results = faiss_service.search(topic_objects, top_k=3, logger=logger)
+        faiss_results = faiss_service.search(topic_objects, top_k=3,resume_path=resume_path, logger=logger)
         logger.info(f"config used in app.py: {config}")
+        logger.info(f"all evidence: {faiss_results}")
         # Initialize interview state
         state = InterviewState(
             session_id=session_id,
@@ -167,12 +178,18 @@ async def get_evaluation(session_id: str):
     
 @app.get("/evaluation-nollm/{session_id}")
 def get_evaluation_nollm(session_id: str):
+    conn = sqlite3.connect("data/interviews.db")
+    cursor = conn.cursor()
+    row = cursor.execute(
+        "SELECT llm_report FROM interview_reports WHERE session_id = ?",
+        (session_id,)
+    ).fetchone()
+    report = row[0] if row else None
     report_data = generate_report(session_id)
     return {
-    "report": "",
+    "report": report,
     "report_data": report_data
     }
-    
 @app.get("/interviews")
 async def get_interviews():
 
@@ -241,3 +258,64 @@ def get_transcript(session_id: str):
         })
 
     return {"transcript": transcript}
+
+# ensure file exists
+def init_profile():
+    if not os.path.exists("data"):
+        os.makedirs("data")
+
+    if not os.path.exists(PROFILE_PATH):
+        with open(PROFILE_PATH, "w") as f:
+            json.dump({
+                "experience": [],
+                "projects": [],
+                "skills": [],
+                "achievements": [],
+                "research": []
+            }, f, indent=2)
+
+
+@app.post("/profile")
+async def save_profile(profile: str = Form(...)):
+    init_profile()
+
+    data = json.loads(profile)
+
+    with open(PROFILE_PATH, "w") as f:
+        json.dump(data, f, indent=2)
+
+    return {"message": "Profile saved"}
+
+@app.get("/profile")
+async def get_profile():
+    init_profile()
+
+    try:
+        with open(PROFILE_PATH, "r") as f:
+            data = json.load(f)
+        return {"profile": data}
+    except:
+        return {"profile": None}
+    
+@app.post("/api_key")
+async def save_api_key(api_key: str = Form(...)):
+
+    # Load existing config
+    try:
+        with open(CONFIG_PATH, "r") as f:
+            config = yaml.safe_load(f) or {}
+    except FileNotFoundError:
+        config = {}
+
+    # Ensure api section exists
+    if "api" not in config:
+        config["api"] = {}
+
+    # Update API key
+    config["api"]["groq_api_key"] = api_key
+
+    # Write back to YAML
+    with open(CONFIG_PATH, "w") as f:
+        yaml.safe_dump(config, f)
+
+    return {"status": "success"}

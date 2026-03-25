@@ -4,13 +4,13 @@ from autogen_core.models import SystemMessage
 import ast
 import asyncio
 
-async def extract_jd_priorities_llm(jd_text: str, jd_role: str, llm_call, logger = None) -> List[str]:
+async def extract_jd_priorities_llm(jd_text: str, jd_role: str, max_topics: int, llm_call, logger = None) -> List[str]:
     """
     Uses an LLM to extract ordered JD priorities.
     `llm_call` should be a function that takes (system_prompt, user_prompt)
     and returns raw text.
     """
-
+    MAX_RETRIES = 3
     user_prompt = f"""
         Extract the main interview topics for the given job role and job description.
         job role: {jd_role}
@@ -24,12 +24,12 @@ async def extract_jd_priorities_llm(jd_text: str, jd_role: str, llm_call, logger
         - keywords: 4–5 related related terms/subtopics that might appear in a resume
 
         Rules:
-        - 3 to 6 topics
+        - Give ONLY {max_topics} most important topics or less if enough.
         - topic must be 2–4 words
         - keywords must be concise resume terms
-        - NO explanations
-        - NO trailing text, only the list
-        Example:
+        - STRICTLY NO explanations
+        - STRICTLY NO trailing text, only the list
+        Example of output structure-
         [
         {{
         "topic": "model deployment",
@@ -41,36 +41,67 @@ async def extract_jd_priorities_llm(jd_text: str, jd_role: str, llm_call, logger
         }}
         ]
     """
-    response = await llm_call.create(
-        messages=[
-            SystemMessage(content=user_prompt)
-        ]
+    for attempt in range(MAX_RETRIES):
+
+        try:
+            response = await llm_call.create(
+                messages=[SystemMessage(content=user_prompt)]
+            )
+
+            raw_output = response.content.strip()
+            if logger:
+                logger.info(f"Attempt {attempt+1} LLM output: {raw_output}")
+
+            # extract list
+            match = re.search(r"\[.*\]", raw_output, re.S)
+            if not match:
+                raise ValueError("No list found in LLM output")
+
+            list_str = match.group(0)
+
+            # parse safely
+            try:
+                topic_objects = json.loads(list_str)
+            except:
+                import ast
+                topic_objects = ast.literal_eval(list_str)
+
+            # validate
+            if not isinstance(topic_objects, list):
+                raise ValueError("Parsed output is not a list")
+
+            cleaned = []
+            for item in topic_objects:
+                if isinstance(item, dict) and "topic" in item:
+                    cleaned.append({
+                        "topic": item.get("topic", "unknown"),
+                        "keywords": item.get("keywords", [])
+                    })
+
+            if not cleaned:
+                raise ValueError("No valid topics found")
+
+            # limit
+            cleaned = cleaned[:6]
+            topics = [item["topic"] for item in cleaned]
+
+            return topics, cleaned
+
+        except Exception as e:
+            if logger:
+                logger.warning(f"Attempt {attempt+1} failed: {e}")
+
+    # ---- fallback ----
+    if logger:
+        logger.error("LLM failed after retries. Using fallback.")
+
+    return (
+        ["general discussion"],
+        [{
+            "topic": "general discussion",
+            "keywords": ["experience", "projects", "skills"]
+        }]
     )
-    print("LLM response for JD priority extraction:\n", response.content)
-    logger.info("\n INSIDE JD PRIORITY EXTRACTION FUNCTION \n")
-    logger.info(f"LLM response for JD priority extraction: {response.content}")
-    logger.info("LLM response received for JD priority extraction.")
-    
-    raw_output = response.content.strip()
-
-    # Extract list block from LLM output
-    match = re.search(r"\[.*\]", raw_output, re.S)
-    if not match:
-        raise ValueError("Could not parse topics list")
-
-    list_str = match.group(0)
-
-    # safer than eval
-    topic_objects = ast.literal_eval(list_str)
-    logger.info(f"Parsed JD priorities: {topic_objects}\n")
-
-    # limit topics
-    if len(topic_objects) > 6:
-        topic_objects  = topic_objects[:6]
-    # simple topic list for existing pipeline
-    topics = [item["topic"] for item in topic_objects]
-    logger.info(f"Extracted JD priorities: {topics}\n")
-    return topics, topic_objects
 
 def extract_jd_priorities_stub(
     job_role: str,

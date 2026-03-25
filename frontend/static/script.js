@@ -1,32 +1,16 @@
+let DEFAULT_CONFIG= {};
+
+fetch("/config")
+  .then(r => r.json())
+  .then(data => {
+      DEFAULT_CONFIG = data;
+      console.log(DEFAULT_CONFIG.models.llm_model);
+  });
+
 let ws;
 let sessionId = null;
 let topicChart = null;
 let currentEvaluationSession = null;
-const DEFAULT_CONFIG = {
-
-    api_key: "",
-
-    interview: {
-        questions_per_topic: 3,
-
-        difficulty: "medium",   
-
-        thresholds: {
-            weak: 0.5,
-            medium: 0.75
-        },
-
-        policy: {
-            start: { theory: 0.6, applied: 0.4 },
-            weak: { clarification: 0.8, theory: 0.2 },
-            medium: { depth: 0.5, theory: 0.3, applied: 0.2 },
-            strong: { applied: 0.5, depth: 0.3, theory: 0.2 }
-        }
-    }
-
-};
-
-
 
 window.addEventListener("DOMContentLoaded", () => {
     document.getElementById("evaluation-screen").style.display = "none";
@@ -98,108 +82,343 @@ window.addEventListener("DOMContentLoaded", () => {
 
     };
 
+
 });
+
+
+function saveApiKey() {
+
+    const key = document.getElementById("apiKey").value.trim();
+
+    fetch("/api_key", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: new URLSearchParams({
+            api_key: key
+        })
+    })
+    .then(() => alert("API Key saved"));
+}
+
+function toggleInputMethod() {
+    const method = document.querySelector('input[name="inputMethod"]:checked').value;
+
+    document.getElementById("resume-section").style.display =
+        method === "resume" ? "block" : "none";
+
+    // document.getElementById("profile-section").style.display =
+    //     method === "profile" ? "block" : "none";
+}
+
+function openProfile() {
+    document.getElementById("setup-screen").style.display = "none";
+    document.getElementById("profile-screen").style.display = "block";
+    loadProfile();
+}
+
+
+function addExperience() {
+    const container = document.getElementById("experience-container");
+    const div = document.createElement("div");
+    div.classList.add("exp-block");
+    const idx = container.children.length + 1;
+    div.innerHTML = `
+        <div class="block-header">
+            <span class="block-index">EXP · ${String(idx).padStart(2, '0')}</span>
+            <button class="remove-btn"
+                onclick="this.closest('.exp-block').remove(); updateCounts();">✕</button>
+        </div>
+        <div class="input-grid">
+            <div class="input-group">
+                <label>Company</label>
+                <input type="text" placeholder="Google, Meta..." class="exp-company">
+            </div>
+            <div class="input-group">
+                <label>Role</label>
+                <input type="text" placeholder="Software Engineer" class="exp-role">
+            </div>
+            <div class="input-group">
+                <label>From</label>
+                <input type="date" class="exp-from">
+            </div>
+            <div class="input-group">
+                <label>To</label>
+                <input type="date" class="exp-to">
+            </div>
+            <div class="input-group full-width">
+                <label>Points</label>
+                <textarea placeholder="One point per line" class="exp-points"></textarea>
+            </div>
+        </div>`;
+    container.appendChild(div);
+    updateCounts();
+    div.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function addProject() {
+    const container = document.getElementById("project-container");
+    const div = document.createElement("div");
+    div.classList.add("proj-block");
+    const idx = container.children.length + 1;
+    div.innerHTML = `
+        <div class="block-header">
+            <span class="block-index">PROJ · ${String(idx).padStart(2, '0')}</span>
+            <button class="remove-btn"
+                onclick="this.closest('.proj-block').remove(); updateCounts();">✕</button>
+        </div>
+        <div class="input-grid">
+            <div class="input-group">
+                <label>Project Name</label>
+                <input type="text" placeholder="My Awesome Project" class="proj-name">
+            </div>
+            <div class="input-group">
+                <label>Tech Stack</label>
+                <input type="text" placeholder="React, Node, Postgres" class="proj-tech">
+            </div>
+            <div class="input-group full-width">
+                <label>Link (optional)</label>
+                <input type="text" placeholder="https://github.com/..." class="proj-link">
+            </div>
+            <div class="input-group full-width">
+                <label>Points</label>
+                <textarea placeholder="One point per line" class="proj-points"></textarea>
+            </div>
+        </div>`;
+    container.appendChild(div);
+    updateCounts();
+    div.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function updateCounts() {
+    const exp = document.querySelectorAll(".exp-block").length;
+    const proj = document.querySelectorAll(".proj-block").length;
+    document.getElementById("exp-count").textContent =
+        exp + (exp === 1 ? " entry" : " entries");
+    document.getElementById("proj-count").textContent =
+        proj + (proj === 1 ? " entry" : " entries");
+}
+
+function buildProfileJSON() {
+    const experiences = [];
+    document.querySelectorAll(".exp-block").forEach(block => {
+        const company = block.querySelector(".exp-company").value;
+        const role = block.querySelector(".exp-role").value;
+        const from = block.querySelector(".exp-from").value;
+        const to = block.querySelector(".exp-to").value;
+        const points = block.querySelector(".exp-points").value
+            .split("\n").map(p => p.trim()).filter(p => p);
+        if (company || role || points.length) {
+            experiences.push({ company, role, from, to, points });
+        }
+    });
+
+    const projects = [];
+    document.querySelectorAll(".proj-block").forEach(block => {
+        const name = block.querySelector(".proj-name").value;
+        const tech = block.querySelector(".proj-tech").value;
+        const link = block.querySelector(".proj-link").value;
+        const points = block.querySelector(".proj-points").value
+            .split("\n").map(p => p.trim()).filter(p => p);
+        if (name || points.length) {
+            projects.push({ name, tech, link, points });
+        }
+    });
+
+    const skills = document.getElementById("skillsInput").value
+        .split(",").map(s => s.trim()).filter(s => s);
+    const achievements = document.getElementById("achievementsInput").value
+        .split("\n").map(a => a.trim()).filter(a => a);
+
+    return {
+        experience: experiences,
+        projects: projects,
+        skills: skills,
+        achievements: achievements,
+        research: []
+    };
+}
+
+function saveProfile() {
+    const profile = buildProfileJSON();
+    fetch("/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ profile: JSON.stringify(profile) })
+    })
+    .then(() => {
+        const btn = document.querySelector(".save-btn");
+        btn.textContent = "✓ Saved!";
+        btn.style.background = "linear-gradient(135deg, #059669, #10b981)";
+        setTimeout(() => {
+            btn.textContent = "Save Profile";
+            btn.style.background = "";
+        }, 1800);
+    });
+}
+
+function loadProfile() {
+    fetch("/profile")
+        .then(res => res.json())
+        .then(data => {
+            const profile = data.profile;
+            document.getElementById("experience-container").innerHTML = "";
+            document.getElementById("project-container").innerHTML = "";
+            if (!profile) return;
+
+            // Experience
+            profile.experience.forEach(exp => {
+                addExperience();
+                const blocks = document.querySelectorAll(".exp-block");
+                const last = blocks[blocks.length - 1];
+                last.querySelector(".exp-company").value = exp.company || "";
+                last.querySelector(".exp-role").value = exp.role || "";
+                last.querySelector(".exp-points").value = (exp.points || []).join("\n");
+                // new optional fields — only fill if data exists
+                if (exp.from) last.querySelector(".exp-from").value = exp.from;
+                if (exp.to)   last.querySelector(".exp-to").value   = exp.to;
+            });
+
+            // Projects
+            profile.projects.forEach(proj => {
+                addProject();
+                const blocks = document.querySelectorAll(".proj-block");
+                const last = blocks[blocks.length - 1];
+                last.querySelector(".proj-name").value = proj.name || "";
+                last.querySelector(".proj-points").value = (proj.points || []).join("\n");
+                // new optional fields — only fill if data exists
+                if (proj.tech) last.querySelector(".proj-tech").value = proj.tech;
+                if (proj.link) last.querySelector(".proj-link").value = proj.link;
+            });
+
+            // Skills
+            document.getElementById("skillsInput").value =
+                (profile.skills || []).join(", ");
+
+            // Achievements
+            document.getElementById("achievementsInput").value =
+                (profile.achievements || []).join("\n");
+
+            updateCounts();
+        });
+}
+
 
 // --- Setup Function ---
 async function startInterview() {
 
+    const preparingMsg = addSystemMessage("Preparing your interview... This may take a few seconds.");
+    enableInput(false);
+
     const config = {
-
-        api_key:
-            document.getElementById("apiKey")?.value || DEFAULT_CONFIG.api_key,
-
+        api: {
+            groq_api_key:
+                document.getElementById("apiKey")?.value ||
+                DEFAULT_CONFIG.api.groq_api_key
+        },
+        models: {
+            llm_model: DEFAULT_CONFIG.models.llm_model,
+            embedding_model: DEFAULT_CONFIG.models.embedding_model
+        },
         interview: {
-
             questions_per_topic:
                 parseInt(document.getElementById("questionsPerTopic")?.value) ||
                 DEFAULT_CONFIG.interview.questions_per_topic,
-
+            max_topics:
+                parseInt(document.getElementById("maxTopics")?.value) ||
+                DEFAULT_CONFIG.interview.max_topics,
             difficulty:
                 document.getElementById("difficulty")?.value ||
-                DEFAULT_CONFIG.difficulty,
-
+                DEFAULT_CONFIG.interview.difficulty,        // ← was DEFAULT_CONFIG.difficulty (wrong path)
             thresholds: {
-
                 weak:
                     parseFloat(document.getElementById("weakThreshold")?.value) ||
                     DEFAULT_CONFIG.interview.thresholds.weak,
-
                 medium:
                     parseFloat(document.getElementById("mediumThreshold")?.value) ||
-                    DEFAULT_CONFIG.intervie.thresholds.medium
-
-            },
-
+                    DEFAULT_CONFIG.interview.thresholds.medium  // ← was DEFAULT_CONFIG.intervie (typo)
+                },
             policy: {
-
                 start: {
                     theory:
                         parseFloat(document.getElementById("startTheory")?.value) ||
                         DEFAULT_CONFIG.interview.policy.start.theory,
-
                     applied:
                         parseFloat(document.getElementById("startApplied")?.value) ||
                         DEFAULT_CONFIG.interview.policy.start.applied
                 },
-
                 weak: {
                     clarification:
                         parseFloat(document.getElementById("weakClarification")?.value) ||
                         DEFAULT_CONFIG.interview.policy.weak.clarification,
-
                     theory:
                         parseFloat(document.getElementById("weakTheory")?.value) ||
                         DEFAULT_CONFIG.interview.policy.weak.theory
                 },
-
                 medium: {
                     depth:
                         parseFloat(document.getElementById("mediumDepth")?.value) ||
                         DEFAULT_CONFIG.interview.policy.medium.depth,
-
-                    theory:
+                        theory:
                         parseFloat(document.getElementById("mediumTheory")?.value) ||
                         DEFAULT_CONFIG.interview.policy.medium.theory,
-
                     applied:
                         parseFloat(document.getElementById("mediumApplied")?.value) ||
                         DEFAULT_CONFIG.interview.policy.medium.applied
                 },
-
                 strong: {
                     applied:
                         parseFloat(document.getElementById("strongApplied")?.value) ||
                         DEFAULT_CONFIG.interview.policy.strong.applied,
-
                     depth:
                         parseFloat(document.getElementById("strongDepth")?.value) ||
                         DEFAULT_CONFIG.interview.policy.strong.depth,
-
                     theory:
                         parseFloat(document.getElementById("strongTheory")?.value) ||
                         DEFAULT_CONFIG.interview.policy.strong.theory
                 }
-
             }
+        },
+        logging: {
+            on: DEFAULT_CONFIG.logging.on,
+            level: DEFAULT_CONFIG.logging.level
         }
     };
 
-    document.getElementById("evaluation-screen").style.display = "none";
-
     const role = document.getElementById('jobRole').value;
     const jd = document.getElementById('jobDescription').value;
-    const resumeFile = document.getElementById('resumeFile').files[0];
+    const method = document.querySelector('input[name="inputMethod"]:checked').value;
 
     if (!role) return alert("Please enter a job role");
     if (!jd) return alert("Please paste the job description");
-    if (!resumeFile) return alert("Please upload your resume");
+    
+    // --- UI Transition ---
+    document.getElementById('setup-screen').style.display = 'none';
+    document.getElementById('afterInterview').style.display = 'none';
+    document.getElementById('chat-screen').style.display = 'flex';
+    document.getElementById('status').style.color = 'orange';
+    document.getElementById('status').innerText = '● Preparing';
+    document.getElementById('role-display').innerText = role + " Interview";
 
     // --- Send data to backend ---
     const formData = new FormData();
     formData.append("role", role);
     formData.append("jd", jd);
-    formData.append("resume", resumeFile);
     formData.append("config", JSON.stringify(config));
+
+    if (method === "profile") {
+
+    } else {
+        const fileInput = document.getElementById("resumeFile");
+        const resumeFile = fileInput.files[0];
+
+        if (!resumeFile) {
+            return alert("Please upload your resume");
+        }
+
+        formData.append("resume", resumeFile);
+    }
 
     const response = await fetch("/setup", {
         method: "POST",
@@ -209,25 +428,27 @@ async function startInterview() {
     sessionId = data.session_id;
     console.log("SESSION ID:", sessionId);
 
-    // --- UI Transition ---
-    document.getElementById('setup-screen').style.display = 'none';
-    document.getElementById('chat-screen').style.display = 'flex';
-    document.getElementById('role-display').innerText = role + " Interview";
-
     // --- WebSocket connection ---
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-
+    
     ws = new WebSocket(
         `${protocol}://${window.location.host}/ws/interview/${sessionId}`
     );
-
+    
     ws.onopen = function () {
         console.log("Connected to Interview Server");
+        document.getElementById('status').style.color = 'green';
+        document.getElementById('status').innerText = '● Live';
     };
-
+    
+    
     ws.onmessage = function (event) {
 
         const data = event.data;
+
+        if (preparingMsg && preparingMsg.parentNode) {  
+            preparingMsg.remove();
+        }
 
         if (data.startsWith("SYSTEM_TURN:USER")) {
             enableInput(true);
@@ -244,7 +465,7 @@ async function startInterview() {
             enableInput(false);
             document.getElementById('status').style.color = 'red';
             document.getElementById('status').innerText = '● Finished';
-            document.getElementById('evaluationBtn').style.display = 'block';
+            document.getElementById('afterInterview').style.display = 'flex';
             ws.close();
             return;
         }
@@ -267,7 +488,6 @@ async function startInterview() {
 // --- Chat Functions ---
 
 function addMessage(source, content) {
-    // If source is 'Candidate', ignore it because we already rendered the user's message manually
     if(source === 'Candidate') return;
 
     const messagesDiv = document.getElementById('messages');
@@ -294,12 +514,11 @@ function addMessage(source, content) {
 function addSystemMessage(text) {
     const messagesDiv = document.getElementById('messages');
     const div = document.createElement('div');
-    div.style.textAlign = 'center';
-    div.style.color = '#9ca3af';
-    div.style.fontSize = '0.8rem';
-    div.style.margin = '10px 0';
+    div.className = 'system-message';
     div.innerText = text;
     messagesDiv.appendChild(div);
+    return div;
+
 }
 
 function sendMsg() {
@@ -329,19 +548,95 @@ function enableInput(enabled) {
     if(enabled) input.focus();
 }
 
-async function getEvaluation(){
 
+async function getEvaluation() {
     if (!sessionId) return;
 
-    const response = await fetch(`/evaluation/${sessionId}`);
-    currentEvaluationSession = sessionId;
-    const data = await response.json();
-
+    // Immediately swap screens
     document.getElementById("chat-screen").style.display = "none";
-    document.getElementById("evaluation-screen").style.display = "block";
+    document.getElementById("messages").innerHTML = ""; // clear chat from chat-screen
 
-    renderEvaluation(data.report, data.report_data);
+    document.getElementById("evaluation-loading-screen").style.display = "flex";
 
+    // Animate steps + progress bar while waiting
+    const steps = ["step-1", "step-2", "step-3"];
+    const progressFill = document.getElementById("evalProgressFill");
+    const progressTargets = [25, 55, 80];
+    let stepIndex = 0;
+
+    function activateNextStep() {
+        if (stepIndex > 0) {
+            document.getElementById(steps[stepIndex - 1]).classList.remove("active");
+            document.getElementById(steps[stepIndex - 1]).classList.add("done");
+        }
+        if (stepIndex < steps.length) {
+            document.getElementById(steps[stepIndex]).classList.add("active");
+            progressFill.style.width = progressTargets[stepIndex] + "%";
+            stepIndex++;
+        }
+    }
+
+    activateNextStep(); // step 1 immediately
+    const t1 = setTimeout(() => activateNextStep(), 1800);  // step 2
+    const t2 = setTimeout(() => activateNextStep(), 3800);  // step 3
+
+    try {
+        const response = await fetch(`/evaluation/${sessionId}`);
+        currentEvaluationSession = sessionId;
+        const data = await response.json();
+
+        // Complete progress before transition
+        clearTimeout(t1); clearTimeout(t2);
+        steps.forEach(id => {
+            const el = document.getElementById(id);
+            el.classList.remove("active");
+            el.classList.add("done");
+        });
+        progressFill.style.width = "100%";
+
+        await new Promise(r => setTimeout(r, 500)); // brief pause at 100%
+
+        document.getElementById("evaluation-loading-screen").style.display = "none";
+        document.getElementById("evaluation-screen").style.display = "block";
+        renderEvaluation(data.report, data.report_data);
+
+    } catch (err) {
+        clearTimeout(t1); clearTimeout(t2);
+        document.getElementById("evaluation-loading-screen").style.display = "none";
+        document.getElementById("chat-screen").style.display = "flex"; // or however you show it
+        console.error("Evaluation failed:", err);
+    }
+}
+
+function formatReport(text) {
+    // Remove * and # characters
+    text = text.replace(/[*#]/g, '');
+
+    const headings = [
+        "Interview Summary",
+        "Key Strengths",
+        "Areas for Improvement",
+        "Final Evaluation",
+        "Recommendations",
+        "Interview Evaluation Report"
+    ];
+
+    // Replace headings with styled section headers
+    headings.forEach(heading => {
+        text = text.replace(
+            new RegExp(heading, 'g'),
+            `</div><div class="report-section">
+                <div class="report-heading">${heading}</div>`
+        );
+    });
+
+    // Preserve line breaks
+    text = text.replace(/\n/g, '<br>');
+
+    // Wrap everything and close the last open div
+    text = `${text}</div>`;
+
+    return text;
 }
 
 function renderEvaluation(report, reportData){
@@ -351,7 +646,9 @@ function renderEvaluation(report, reportData){
     document.getElementById("evaluation-screen").style.display = "block";
 
     /* SCORE */
-    document.getElementById("score-value").innerText = reportData.overall_score;
+    document.getElementById("score-value").innerText = (reportData.overall_score * 100).toFixed(2) + "%";
+    console.log(reportData.overall_score);
+    console.log(typeof reportData.overall_score);
 
     /* STRENGTHS */
     const strengthList = document.getElementById("strength-list");
@@ -383,46 +680,86 @@ function renderEvaluation(report, reportData){
     const ctx = document.getElementById("topicChart").getContext("2d");
 
     const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-    gradient.addColorStop(0, "#f1a863");
-    gradient.addColorStop(1, "#e546d0");
+    gradient.addColorStop(0, 'rgba(241, 168, 99, 0.9)');    // orange top
+    gradient.addColorStop(1, 'rgba(229, 70, 208, 0.7)'); 
 
     if (topicChart) {
         topicChart.destroy();
     }
 
     topicChart = new Chart(ctx, {
-
         type: "bar",
-
         data: {
             labels: labels,
             datasets: [{
                 label: "Score %",
                 data: values,
-                backgroundColor: gradient
+                backgroundColor: gradient,
+                borderColor: 'rgba(229, 70, 208, 0.9)',
+                borderWidth: 1,
+                borderRadius: 6,
+                hoverBackgroundColor: 'rgba(241, 100, 220, 0.75)',
             }]
         },
-
         options: {
-
+            plugins: {
+                legend: {
+                    labels: {
+                        color: '#4a6fa5',
+                        font: { family: 'DM Mono', size: 11 }
+                    }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(10, 22, 40, 0.95)',
+                    borderColor: 'rgba(229, 70, 208, 0.4)',
+                    borderWidth: 1,
+                    titleColor: '#e8f0fe',
+                    bodyColor: '#93b4dc',
+                    titleFont: { family: 'DM Mono', size: 11 },
+                    bodyFont: { family: 'DM Mono', size: 11 },
+                    callbacks: {
+                        label: ctx => ` ${ctx.parsed.y}%`
+                    }
+                }
+            },
             scales: {
+                x: {
+                    ticks: {
+                        color: '#4a6fa5',
+                        font: { family: 'DM Mono', size: 11 }
+                    },
+                    grid: {
+                        color: 'rgba(77, 139, 255, 0.06)'
+                    },
+                    border: {
+                        color: 'rgba(77, 139, 255, 0.15)'
+                    }
+                },
                 y: {
                     beginAtZero: true,
                     max: 100,
                     ticks: {
+                        color: '#4a6fa5',
+                        font: { family: 'DM Mono', size: 11 },
                         callback: value => value + "%"
+                    },
+                    grid: {
+                        color: 'rgba(77, 139, 255, 0.06)'
+                    },
+                    border: {
+                        color: 'rgba(77, 139, 255, 0.15)'
                     }
                 }
             }
-
         }
-
     });
 
     /* SUMMARY */
-    if (report){
-        document.getElementById("evaluation-text").innerText = report;
-    } else {
+
+    if (report) {
+        document.getElementById("evaluation-text").innerHTML = formatReport(report);
+    }
+    else {
         document.getElementsByClassName("summary-section")[0].style.display = "none";
     }
 
@@ -451,18 +788,11 @@ function openHistory(){
 
 function goBack(screen){
 
-
-    if(screen === "history" || screen === "config"){
-        document.getElementById("history-screen").style.display = "none";
-        document.getElementById("config-panel").style.display = "none";
-        document.getElementById("setup-screen").style.display = "block";
-    }
-    else if(screen === "evaluation"){
-
-        document.getElementById("evaluation-screen").style.display = "none";
-        document.getElementById("history-screen").style.display = "block";    
-    }
-
+    document.getElementById("config-panel").style.display = "none";
+    document.getElementById("profile-screen").style.display = "none";
+    document.getElementById("evaluation-screen").style.display = "none";
+    document.getElementById("history-screen").style.display = "none";
+    document.getElementById("setup-screen").style.display = "block";
 }   
 
 async function loadHistory(){
@@ -498,16 +828,17 @@ async function loadHistory(){
 
         row.onclick = async () => {
 
+            // hide history
+            document.getElementById("loading-overlay").style.display = "flex";
             const response = await fetch(`/evaluation-nollm/${interview.session_id}`);
             currentEvaluationSession = interview.session_id;
             const data = await response.json();
-
+            
             const report = data.report;
             const report_data = data.report_data;
-
-            // hide history
             document.getElementById("history-screen").style.display = "none";
-
+            document.getElementById("loading-overlay").style.display = "none";
+            
             renderEvaluation(report, report_data);
 
         };
@@ -642,6 +973,8 @@ function applyConfig(config){
 
 }
 
+// transcript
+
 async function viewTranscript(){
 
     console.log("Viewing transcript for session:", currentEvaluationSession);
@@ -671,4 +1004,4 @@ async function viewTranscript(){
 
     document.getElementById("transcript-modal").style.display = "flex";
 
-}
+}   

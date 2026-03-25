@@ -8,7 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
 </head>
 <body>
-
+    <!-- setup screen -->
     <div id="setup-screen">
         <div class="badge">Multi-Agent AI System</div>
         <h1>InterviewSim AI</h1>
@@ -21,28 +21,126 @@
             Resume-aware Questions • Probabilistic Interviewer Policy • Automated Evaluations  
              • Interview Analytics
         </p>
-        <label>Target Role</label>
+        <label class="input-label">Target Role</label>
         <input type="text" id="jobRole" placeholder="Target Role (e.g. Data Scientist, Assistant Manager)" required />
-        <label>Job Description</label>
+        <label class="input-label">Job Description</label>
         <textarea id="jobDescription" placeholder="Paste Job Description" required></textarea>
-
-        <label class="file-upload">
-            Upload Resume (PDF)
-            <input type="file" id="resumeFile" accept=".pdf" required>
+        <label class="input-label">Conduct Interview Using
+            <span class="info-tip">
+                        ⓘ
+                <span class="tooltip">
+                    It is recommended to build and use profile for accurate and personalized interview experience.
+                </span>
+            </span>
         </label>
+        <div class="radio-option">
+            <label>
+                <input type="radio" name="inputMethod" value="profile" checked onchange="toggleInputMethod()">
+                <span>Profile Build</span>
+            </label>
+            <label>
+                <input type="radio" name="inputMethod" value="resume" onchange="toggleInputMethod()">
+                <span>Resume</span>
+            </label>
+        </div>
+        <div id="resume-section" style="display:none;">
+            <label class="file-upload">
+                Upload Resume (PDF)
+                <input type="file" id="resumeFile" accept=".pdf" required>
+            </label>
+        </div>
 
-        <button onclick="startInterview()">Start Interview</button>
+        <button class="full-btn"onclick="startInterview()">Start Interview</button>
 
-        <div class="button-row">
-            <button id="toggleConfig">Advanced Interview Settings</button>
+        <div class="button-row">    
+            <button id="toggleConfig">Advance Interview Settings</button>
             <button onclick="openHistory()">Past Interviews</button>
+            <button onclick="openProfile()">Build Profile</button>
         </div>
     </div>
+    <!-- profile screen --> 
+    <div id="profile-screen" style = "display: none;">
 
+        <!-- Sticky Header -->
+        <div class="profile-header">
+            <button class="config-back" onclick="goBack('profile')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"></path></svg>
+            Back
+            </button>
+            <span class="header-title">Profile</span>
+            <span class="header-subtitle">interview · profile.json</span>
+        </div>
+
+        <div class="profile-content">
+
+            <!-- Experience Section -->
+            <div class="profile-container">
+            <div class="section-label">
+                <div class="section-icon">💼</div>
+                <h3>Experience</h3>
+                <span class="section-count" id="exp-count">0 entries</span>
+            </div>
+            <div id="experience-container"></div>
+            <button class="add-btn" onclick="addExperience()">
+                <span class="plus-icon">+</span>
+                Add Experience
+            </button>
+            </div>
+
+            <!-- Projects Section -->
+            <div class="profile-container">
+            <div class="section-label">
+                <div class="section-icon">🚀</div>
+                <h3>Projects</h3>
+                <span class="section-count" id="proj-count">0 entries</span>
+            </div>
+            <div id="project-container"></div>
+            <button class="add-btn" onclick="addProject()">
+                <span class="plus-icon">+</span>
+                Add Project
+            </button>
+            </div>
+
+            <!-- Skills Section -->
+            <div class="profile-container">
+            <div class="section-label">
+                <div class="section-icon">⚡</div>
+                <h3>Skills</h3>
+            </div>
+            <div class="skills-wrapper">
+                <input type="text" id="skillsInput" placeholder="Python, FastAPI, React, ML...">
+                <span class="skills-hint">comma separated</span>
+            </div>
+            </div>
+
+            <!-- Achievements Section -->
+            <div class="profile-container">
+            <div class="section-label">
+                <div class="section-icon">🏆</div>
+                <h3>Achievements</h3>
+            </div>
+            <textarea id="achievementsInput" placeholder="One achievement per line
+
+        e.g. Ranked top 5% in national coding contest
+        Open source contributor with 500+ stars" rows="5"></textarea>
+            </div>
+
+        </div><!-- end profile-content -->
+
+        <!-- Fixed Save Bar -->
+        <div class="save-section">
+            <span class="save-info">Changes saved locally</span>
+            <button class="save-btn" onclick="saveProfile()">Save Profile</button>
+        </div>
+
+        </div>
+
+    <!-- config panel -->
     <div id="config-panel" style="display:none;">
-
-        <button onclick="goBack('config')" id="closeConfig" class="config-back">← Back</button>
-        <h2 class="config-title">Advanced Interview Settings</h2>
+        <div id = "closeConfig">
+            <button onclick="goBack('config')" class="config-back">← Back</button>
+        </div>
+        <h2 class="config-title">Advance Interview Settings</h2>
         <hr>
         <div class="config-grid">
 
@@ -51,10 +149,20 @@
 
                 <h3>API Settings</h3>
                 <hr>
-                <input type="text" id="apiKey" placeholder="LLM API Key">
+                <input type="text" id="apiKey" placeholder="LLM API Key" value= "{{api_key}}">
+                <button id="saveApiKeyBtn" onclick="saveApiKey()">Save API Key</button>
 
                 <h3>Interview Parameters</h3>
                 <hr>
+                <label>Maximum Topics
+                    <span class="info-tip">
+                        ⓘ
+                        <span class="tooltip">
+                            Maximum number of JD topics extracted and covered in the interview.
+                        </span>
+                    </span>
+                </label>
+                <input type="number" id="maxTopics" value="6">
                 <label>Questions per Topic
                     <span class="info-tip">
                         ⓘ
@@ -117,13 +225,13 @@
             <div class="config-column">
 
                 <h3>Interviewer Policy
-                    <span class="info-tip">
+                    <span class="info-tip tooltip-left">
                         ⓘ
                         <span class="tooltip">
                             Theory: Asking theoretical questions.<br>
                             Applied: Questions from resume and applied scenarios.<br>
                             Depth:  Questions that probe deeper into candidate's previous answer.<br>
-                            clarification: question to clarify previous answer when it's very weak.<br>
+                            Clarification: question to clarify previous answer when it's very weak.<br>
                         </span>
                     </span>
                 </h3>
@@ -131,7 +239,7 @@
                 <div class="policy-block" data-group = "start">
 
                     <h4>Start
-                        <span class="info-tip">
+                        <span class="info-tip tooltip-left">
                             ⓘ
                             <span class="tooltip">
                                 The interviewer's questioning strategy for the first question to start the interview.
@@ -154,7 +262,7 @@
                 <div class="policy-block" data-group = "weak">
 
                     <h4>Weak Answer
-                        <span class="info-tip">
+                        <span class="info-tip tooltip-left">
                             ⓘ
                             <span class="tooltip">
                                 The interviewer's questioning strategy when the candidate's answer is very weak (below the weak threshold).
@@ -177,7 +285,7 @@
                 <div class="policy-block" data-group = "medium">
 
                     <h4>Medium Answer
-                        <span class="info-tip">
+                        <span class="info-tip tooltip-left">
                             ⓘ
                             <span class="tooltip">
                                 The interviewer's questioning strategy when the candidate's answer is decent but not great (between the weak and medium thresholds).
@@ -205,7 +313,7 @@
                 <div class="policy-block" data-group = "strong">
 
                     <h4>Strong Answer
-                        <span class="info-tip">
+                        <span class="info-tip tooltip-left">
                             ⓘ
                             <span class="tooltip">
                                 The interviewer's questioning strategy when the candidate's answer is strong (above the medium threshold).
@@ -236,12 +344,12 @@
         </button>
 
     </div>
-
+    <!-- history screen -->
     <div id="history-screen" style="display:none;">
 
         <div id="history-header">
             <h2>Past Interviews</h2>
-            <button onclick="goBack('history')" id="closeConfig" class="config-back">← Back</button>
+            <button onclick="goBack('history')" class="config-back">← Back</button>
         </div>
 
         <table id="history-table">
@@ -262,28 +370,31 @@
         </table>
 
     </div>
-
+    <!-- chat screen -->
     <div id="chat-screen">
         <div id="header">
             <h2 id="role-display">Interview</h2>
-            <span id="status">● Live</span>
+            <span id="status">● Preparing</span>
         </div>
         
-        <div id="messages">
-            </div>
+        <div id="messages"></div>
 
         <div id="input-area">
             <textarea id="msgInput" placeholder="Type your answer..." rows="2" disabled></textarea>
             <button onclick="sendMsg()" id="sendBtn">Send</button>
         </div>
-        <button id="evaluationBtn" onclick="getEvaluation()" style="display:none;">
-            Get Evaluation
-        </button>
+
+        <div id = "afterInterview" class="button-row" style="display:none;"> 
+            <button id="evaluationBtn" onclick="getEvaluation()">
+                Get Evaluation
+            </button>
+            <button onclick="goBack('setup-screen')" class="config-back">← Back</button> 
+        </div> 
     </div>
-        
+    <!-- evaluation screen -->
     <div id="evaluation-screen">
 
-        <button onclick="goBack('evaluation')" id="closeConfig" class="config-back">← Back</button>
+        <button onclick="goBack('setup-screen')" class="config-back">← Back to Home</button>
         <div class="eval-container">
 
             <!-- SCORE -->
@@ -325,6 +436,7 @@
         </div>
 
     </div>
+    <!-- transcript modal -->
     <div id="transcript-modal" class="modal">
 
         <div class="modal-content">
@@ -339,7 +451,40 @@
         </div>
 
     </div>
-
+    <!-- evaluation loading screen -->
+    <div id="evaluation-loading-screen" style="display:none;">
+        <div class="eval-loader-container">
+            <div class="eval-pulse-ring"></div>
+            <div class="eval-icon">
+                <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M6 10h20M6 16h14M6 22h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+            </div>
+            <h2 class="eval-title">Generating your evaluation</h2>
+            <p class="eval-subtitle">Analyzing your interview performance...</p>
+            <div class="eval-steps">
+                <div class="eval-step active" id="step-1">
+                    <div class="step-dot"></div>
+                    <span>Reviewing responses</span>
+                </div>
+                <div class="eval-step" id="step-2">
+                    <div class="step-dot"></div>
+                    <span>Scoring performance</span>
+                </div>
+                <div class="eval-step" id="step-3">
+                    <div class="step-dot"></div>
+                    <span>Preparing feedback</span>
+                </div>
+            </div>
+            <div class="eval-progress-bar">
+                <div class="eval-progress-fill" id="evalProgressFill"></div>
+            </div>
+        </div>
+    </div>
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="loader"></div>
+        <p>Please wait...</p>
+    </div>
     <script src="/static/script.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </body>

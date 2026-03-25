@@ -9,7 +9,8 @@ import os
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 import asyncio
 from autogen_core.models import SystemMessage
-
+from .database import save_report
+from datetime import datetime
 load_dotenv()
 
 embedding_model_name = os.getenv("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2")
@@ -116,7 +117,7 @@ def generate_report(session_id):
     }
 
     report = {
-        "overall_score": f"{round(overall_score, 2) * 100}%",
+        "overall_score": overall_score,
         "topic_scores": topic_avg,
         "strengths": top_strengths,
         "weaknesses": top_weaknesses
@@ -150,6 +151,16 @@ async def generate_human_report(llm_client, session_id, job_role):
     ]
     )
     report = response.content.replace('*', '')
+    save_report({
+    "session_id": session_id,
+    "overall_score": report_data["overall_score"],
+    "strengths": report_data["strengths"],
+    "weaknesses": report_data["weaknesses"],
+    "topic_performance": report_data["topic_scores"],
+    "llm_report": report,
+    "created_at": datetime.now().isoformat()
+    })
+    
     return report, report_data
 
 # async def main():

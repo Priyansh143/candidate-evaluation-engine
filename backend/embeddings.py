@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 import yaml
 
-with open("backend/config.yaml") as f:
+with open("config.yaml") as f:
     CONFIG = yaml.safe_load(f)
 
 embedding_model_name = CONFIG["models"]["embedding_model"]

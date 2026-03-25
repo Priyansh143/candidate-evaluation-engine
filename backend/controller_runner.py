@@ -32,14 +32,18 @@ async def run_interview(
             state.resume_evidence = faiss_results[state.current_priority_index]
 
             logger.info(f"Entering priority: {current_priority}")
-            logger.info(f"all evidence: {state.resume_evidence}")
-            logger.info(f"FAISS evidence : {state.resume_evidence[0]}")
+            if state.resume_evidence and len(state.resume_evidence) > 0:
+                logger.info(f"FAISS evidence : {state.resume_evidence[0]}")
+            else:
+                logger.warning("No FAISS evidence found")
+                state.resume_evidence = ["No relevant evidence found."]
 
             await websocket.send_text(
                 f"SYSTEM_INFO:Now evaluating {current_priority}"
             )
 
         # ---- Decide next action ----
+        logger.info(f"[run_interview] Deciding next action")
         action = decide_next_action(state= state, logger= logger)
         logger.info(
             f"[run_interview] Decided action: {action.value} "
@@ -74,6 +78,7 @@ async def run_interview(
             jd_priority=current_priority,
             question=question,
             answer=answer,
+            difficulty = interview_difficulty,
             logger = logger
         )
         

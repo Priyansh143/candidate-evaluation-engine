@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+logs/
+uploads/
+*.db
+*.pdf
+start.txt
+tests/
+future_improvement.txt
+.env

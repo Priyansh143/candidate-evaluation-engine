@@ -1,0 +1,30 @@
+api:
+  groq_api_key: "YOUR_GROQ_API_KEY"
+interview:
+  difficulty: medium
+  max_topics: 6
+  policy:
+    medium:
+      applied: 0.2
+      depth: 0.5
+      theory: 0.3
+    start:
+      applied: 0.4
+      theory: 0.6
+    strong:
+      applied: 0.5
+      depth: 0.3
+      theory: 0.2
+    weak:
+      clarification: 0.8
+      theory: 0.2
+  questions_per_topic: 3
+  thresholds:
+    medium: 0.7
+    weak: 0.5
+logging:
+  true: true
+  level: INFO
+models:
+  embedding_model: BAAI/bge-base-en-v1.5
+  llm_model: llama-3.1-8b-instant
