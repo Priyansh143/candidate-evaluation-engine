@@ -5,61 +5,76 @@ from statistics import mean
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 from sklearn.cluster import AgglomerativeClustering
+from sklearn.metrics.pairwise import cosine_similarity
 import os
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 import asyncio
 from autogen_core.models import SystemMessage
 from .database import save_report
 from datetime import datetime
+import numpy as np
 load_dotenv()
+import yaml
+CONFIG_PATH = "config.yaml"
+with open(CONFIG_PATH, "r") as f:
+    CONFIG = yaml.safe_load(f) 
 
 embedding_model_name = os.getenv("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2")
 
 embedding_model = SentenceTransformer(embedding_model_name, device="cpu")
 
 CONFIDENCE_WEIGHT = {
-    "low": 0.5,
+    "low": 0.8,
     "medium": 1.0,
-    "high": 1.5
+    "high": 1.2
 }
+STRONG_THRESHOLD = 0.85
+WEAK_THRESHOLD = 0.60
 
-def cluster_phrases(phrases, distance_threshold=0.55):
-    """
-    Groups semantically similar phrases together.
-    Returns representative phrase for each cluster.
-    """
+def cluster_phrases(phrases, similarity_threshold=0.75):
 
     if len(phrases) <= 1:
         return [{"phrase": p, "count": 1} for p in phrases]
 
     embeddings = embedding_model.encode(phrases, normalize_embeddings=True)
 
-    clustering = AgglomerativeClustering(
-        n_clusters=None,
-        distance_threshold=distance_threshold
-    )
+    similarity_matrix = cosine_similarity(embeddings)
 
-    labels = clustering.fit_predict(embeddings)
+    visited = set()
+    clusters = []
 
-    clusters = {}
+    for i in range(len(phrases)):
 
-    for label, phrase in zip(labels, phrases):
-        clusters.setdefault(label, []).append(phrase)
+        if i in visited:
+            continue
 
-    # pick most common phrase per cluster
-    cluster_summary = []
+        cluster_indices = [i]
+        visited.add(i)
 
-    for phrases in clusters.values():
-        representative = max(set(phrases), key=phrases.count)
-        cluster_summary.append({
+        for j in range(i + 1, len(phrases)):
+
+            if similarity_matrix[i][j] >= similarity_threshold:
+                cluster_indices.append(j)
+                visited.add(j)
+
+        cluster_phrases = [phrases[idx] for idx in cluster_indices]
+
+        # choose central phrase (highest average similarity)
+        cluster_emb = embeddings[cluster_indices]
+        centroid = np.mean(cluster_emb, axis=0)
+
+        sims = cosine_similarity([centroid], cluster_emb)[0]
+        representative = cluster_phrases[int(np.argmax(sims))]
+
+        clusters.append({
             "phrase": representative,
-            "count": len(phrases)
+            "count": len(cluster_phrases)
         })
 
-    # sort clusters by importance
-    cluster_summary.sort(key=lambda x: x["count"], reverse=True)
+    clusters.sort(key=lambda x: x["count"], reverse=True)
 
-    return cluster_summary
+    return clusters
+
 
 def generate_report(session_id):
 
@@ -90,13 +105,27 @@ def generate_report(session_id):
         strengths = json.loads(st)
         weaknesses = json.loads(wk)
 
-        topic_strengths[topic].extend(strengths)
-        topic_weaknesses[topic].extend(weaknesses)
+        normalized_score = satisfaction  # raw satisfaction for logic
+
+        # ---- Apply filtering logic ----
+
+        if normalized_score >= STRONG_THRESHOLD:
+            # strong answer → keep strengths, ignore weaknesses
+            topic_strengths[topic].extend(strengths)
+
+        elif normalized_score <= WEAK_THRESHOLD:
+            # weak answer → emphasize weaknesses
+            topic_weaknesses[topic].extend(weaknesses)
+
+        else:
+            # medium answer → keep both
+            topic_strengths[topic].extend(strengths)
+            topic_weaknesses[topic].extend(weaknesses)
+
         topic_scores[topic].append(weighted_score)
 
-    overall_score = mean(scores)/1.5  # normalize to [0,1]
-    # print(f"strengths before clustering: {strength_list}\n\n")
-    # print(f"weaknesses before clustering: {weakness_list}\n\n")
+    overall_score = mean(scores) / 1.5  # normalize
+
     final_strengths = []
     final_weaknesses = []
 
@@ -105,12 +134,14 @@ def generate_report(session_id):
         clustered_s = cluster_phrases(topic_strengths[topic])
         clustered_w = cluster_phrases(topic_weaknesses[topic])
 
-        final_strengths.extend([c["phrase"] for c in clustered_s[:2]])
-        final_weaknesses.extend([c["phrase"] for c in clustered_w[:2]])
+        # take most frequent clusters
+        final_strengths.extend([c["phrase"] for c in clustered_s])
+        final_weaknesses.extend([c["phrase"] for c in clustered_w])
 
+    # limit report size
     top_strengths = final_strengths[:6]
-    top_weaknesses = final_weaknesses[:6]    
-        # --- Topic Scores ---
+    top_weaknesses = final_weaknesses[:6]
+
     topic_avg = {
         topic: round(mean(vals) / 1.5, 2)
         for topic, vals in topic_scores.items()
@@ -126,6 +157,19 @@ def generate_report(session_id):
     return report
 
 async def generate_human_report(llm_client, session_id, job_role):
+    
+    llm_client = OpenAIChatCompletionClient(model = CONFIG["models"]["llm_model"],
+                                        api_key=CONFIG["api"]["groq_api_key"],
+                                        base_url="https://api.groq.com/openai/v1",
+                                        model_info={
+                                            "family": "llama",
+                                            "context_length": 8192,
+                                            "vision": False,
+                                            "function_calling": True,
+                                            "json_output": True,
+                                            "supports_tools": True,
+                                            "structured_output": False,
+                                        })
 
     report_data = generate_report(session_id)
 
@@ -144,13 +188,13 @@ async def generate_human_report(llm_client, session_id, job_role):
 
         Base the report strictly on the strengths, weaknesses, and topic scores. 
     """
-    print("Prompt for Human Report Generation:\n", prompt)
     response = await llm_client.create(
         messages=[
         SystemMessage(content=prompt)
     ]
     )
     report = response.content.replace('*', '')
+    report = response.content.replace('#', '')
     save_report({
     "session_id": session_id,
     "overall_score": report_data["overall_score"],
