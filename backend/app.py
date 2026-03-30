@@ -32,10 +32,21 @@ with open(CONFIG_PATH, "r") as f:
 app.mount("/static", StaticFiles(directory="frontend/static"), name = "static")
 templates = Jinja2Templates(directory="frontend/templates")
 
+
+# utils
 def log_and_raise(logger, stage, e):
     logger.exception(f"[ERROR] Failure during {stage}: {str(e)}")
     raise
 
+def delete_resume(session_id: str):
+    resume_path = f"data/resume/{session_id}.pdf"
+    try:
+        if os.path.exists(resume_path):
+            os.remove(resume_path)
+    except OSError as e:
+        print(f"Failed to delete resume: {e}")
+
+# websocket handler
 class WebSocketInputHandler:
     def __init__(self, websocket: WebSocket):
         self.websocket = websocket
@@ -91,8 +102,8 @@ async def setup_interview(
     session_id = str(uuid.uuid4())
     resume_path = None
     if (resume):
-        os.makedirs("uploads", exist_ok=True)
-        resume_path = f"uploads/{session_id}.pdf"
+        os.makedirs("data/uploads", exist_ok=True)
+        resume_path = f"data/uploads/{session_id}.pdf"
 
         with open(resume_path, "wb") as buffer:
             shutil.copyfileobj(resume.file, buffer)
@@ -180,6 +191,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             log_and_raise(logger, "run_interview", e)
 
     except WebSocketDisconnect:
+        delete_resume(session_id)
         print("WebSocket disconnected.")
     except Exception as e:
         print(f"Error: {e}")
