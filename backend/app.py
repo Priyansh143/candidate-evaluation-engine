@@ -39,7 +39,7 @@ def log_and_raise(logger, stage, e):
     raise
 
 def delete_resume(session_id: str):
-    resume_path = f"data/resume/{session_id}.pdf"
+    resume_path = f"data/uploads/{session_id}.pdf"
     try:
         if os.path.exists(resume_path):
             os.remove(resume_path)
