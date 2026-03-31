@@ -1,10 +1,13 @@
 # InterviewSim AI
+![Version](https://img.shields.io/badge/version-v1.0-blue)
 
 A **hybrid state–LLM interview simulation platform** that conducts structured interviews using retrieval-augmented context and a deterministic interview controller.
 
 Unlike typical AI interview tools that rely purely on prompts, InterviewSim uses a **state machine and policy engine** to orchestrate LLM agents and maintain a stable interview flow. The system extracts evaluation topics from job descriptions, retrieves relevant resume evidence, generates adaptive questions, evaluates answers in real time, and produces a structured post-interview report with topic-wise performance analysis.
 
 ---
+
+[![Readme Card](https://github-readme-stats.vercel.app/api/pin/?username=Priyansh143&repo=InterviewSim-AI&theme=tokyonight)](https://github.com/Priyansh143/InterviewSim-AI)
 
 ## Demo
 
