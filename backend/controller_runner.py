@@ -113,11 +113,11 @@ async def run_interview(
         # ---- Record state ----
         record_turn(state, action, evaluator_output, question = question, answer = answer)
 
-        # ---- Priority transition ----
+        # ----  Priority transition ----
         should_move_priority = (
             state.questions_asked_in_priority >= state.config["interview"].get("questions_per_topic", 3)
             or (
-                state.questions_asked_in_priority >= state.config["interview"].get("questions_per_topic", 3) / 2
+                state.questions_asked_in_priority > state.config["interview"].get("questions_per_topic", 3) / 2
                 and state.avg_satisfaction_curr_priority >= 0.8
             )
         )
