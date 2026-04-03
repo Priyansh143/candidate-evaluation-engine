@@ -1,7 +1,7 @@
 # Cognix AI
 ![Version](https://img.shields.io/badge/version-v1.0-blue)
 
-A **hybrid state–LLM interview simulation platform** that conducts structured interviews using retrieval-augmented context and a deterministic interview controller.
+A **hybrid state–LLM interview simulation platform** that conducts structured interviews using retrieval-augmented context, a deterministic interview controller and multiple AI agents.
 
 Unlike typical AI interview tools that rely purely on prompts, Cognix uses a **state machine and policy engine** to orchestrate LLM agents and maintain a stable interview flow. The system extracts evaluation topics from job descriptions, retrieves relevant resume evidence, generates adaptive questions, evaluates answers in real time, and produces a structured post-interview report with topic-wise performance analysis.
 
@@ -19,6 +19,7 @@ https://github.com/user-attachments/assets/b064245e-e0a4-4e65-9376-363554b10fae
 ## Key Highlights
 
 • **State-Machine Interview Engine** – deterministic interview control instead of LLM-driven conversations  
+• **Multi-Agent System** – Uses 4 dedicated agents in sync with state machine and smart prompting
 • **Policy-based question strategy** – adaptive question types based on candidate performance  
 • **Retrieval-augmented context** – questions grounded in resume + job description evidence  
 • **Semantic evaluation pipeline** – strengths/weaknesses clustered and aggregated into a final report  
@@ -130,6 +131,60 @@ docker compose down
 The interview data stored in the Docker volume will remain unless the volume is removed manually.
 
 </details>
+
+---
+
+## Multi-Agent Architecture
+
+Cognix uses a small set of specialized LLM agents instead of a single monolithic prompt.
+
+Each agent performs a specific role in the interview pipeline.
+
+### 1. Topic Extractor Agent
+Analyzes the job description and extracts prioritized interview topics along with relevant keywords.
+
+These topics guide the entire interview flow and determine which resume evidence should be retrieved.
+
+### 2. Interviewer Agent
+Generates interview questions based on:
+
+- the current topic
+- retrieved resume evidence
+- the question strategy selected by the policy engine
+- Difficulty level
+- Job Role
+- Subtopics covered in current topic
+- history (last set of question-answer) if question strategy is 'APPLIED'
+
+The agent focuses purely on question generation while the backend controls interview progression.
+
+### 3. Evaluator Agent
+Evaluates candidate responses in real time.
+
+Agent takes input-
+- Job role
+- current topic under evaluation
+- question asked by the interviewer agent
+- answer given by candidate
+- difficulty of interview
+
+The agent produces structured signals including:
+- satisfaction score (0-1)
+- confidence (high, medium, low)
+- strengths
+- weaknesses
+
+These signals are used by the policy engine to determine the next interview action.
+
+### 4. Report Generator Agent
+After the interview ends, this agent converts the aggregated evaluation signals into a human-readable report containing:
+
+- Interview Summary
+- Key Strengths
+- Areas for Improvement
+- Final Evaluation
+
+This separation of responsibilities keeps agent focused and makes the system more predictable and token-efficient.
 
 ---
 
